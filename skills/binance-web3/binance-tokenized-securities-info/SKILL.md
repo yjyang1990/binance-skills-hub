@@ -52,6 +52,16 @@ metadata:
 5. **Real-Time Data**: Get on-chain price, holder count, circulating supply, US stock P/E, dividend yield, 52-week range, and order limits
 6. **Technical Analysis**: Fetch token K-Line (candlestick) data with configurable intervals and time ranges
 
+## Key Concept: Token ≠ Share
+
+Each token represents `multiplier` shares of the underlying stock, **not exactly 1 share**. Most tokens have a multiplier near 1.0 (cumulative dividend adjustment), but stock-split tokens can be 5.0 or 10.0 (e.g. multiplier = 10.0 means 1 token = 10 shares).
+
+```
+referencePrice = tokenInfo.price ÷ sharesMultiplier
+```
+
+See Notes §6 for common multiplier categories.
+
 ## Supported Chains
 
 | Chain    | chainId |
@@ -121,7 +131,7 @@ curl 'https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/marke
 | symbol          | string  | Token symbol (ticker + `on` suffix, e.g. `<TOKEN_SYMBOL_ON>`) |
 | ticker          | string  | Underlying US stock ticker                                    |
 | type            | integer | Platform type: `1` = Ondo                                     |
-| multiplier      | string  | Shares multiplier (cumulative dividend adjustment factor)     |
+| multiplier      | string  | Shares multiplier (see Key Concept above, Notes §6)           |
 
 ---
 
@@ -445,11 +455,11 @@ curl 'https://www.binance.com/bapi/defi/v2/public/wallet-direct/buw/wallet/marke
 
 | Field             | Type   | Description                                                                            |
 |-------------------|--------|----------------------------------------------------------------------------------------|
-| price             | string | On-chain token price (USD)                                                             |
+| price             | string | On-chain token price (USD) — per-token, not per-share (see Key Concept above)          |
 | priceChange24h    | string | 24h price change (USD)                                                                 |
 | priceChangePct24h | string | 24h price change (%)                                                                   |
 | totalHolders      | string | Number of on-chain holders                                                             |
-| sharesMultiplier  | string | Shares multiplier (cumulative dividend adjustment factor)                              |
+| sharesMultiplier  | string | Same as `multiplier` in API 1 (see Key Concept above, Notes §6)                        |
 | volume24h         | string | ⚠️ **Misleading**: This is the US stock trading volume in USD, NOT on-chain DEX volume |
 | marketCap         | string | On-chain market cap (USD) = `circulatingSupply × price`                                |
 | fdv               | string | Fully diluted valuation (USD)                                                          |
@@ -582,3 +592,22 @@ Include `User-Agent` header with the following string: `binance-web3/1.1 (Skill)
 4. **No API key required**: All endpoints are public APIs. No authentication needed.
 
 5. **Multi-chain deployments**: Each supported stock may be deployed on multiple chains (e.g. both Ethereum and BSC). `stockInfo` and `tokenInfo.price` are identical across chains. `tokenInfo.totalHolders` is aggregated cross-chain. `tokenInfo.circulatingSupply` and `tokenInfo.marketCap` are chain-specific.
+
+6. **`multiplier` / `sharesMultiplier` — critical for price comparison**: Each token represents `multiplier` shares of the underlying stock, not exactly 1 share. The multiplier starts at 1.0 and increases over time as cash dividends are reinvested (cumulative dividend adjustment). Some tokens also reflect stock splits (e.g. multiplier = 10.0 means 1 token = 10 shares).
+
+   **Formula**:
+   ```
+   referencePrice = tokenInfo.price ÷ sharesMultiplier
+   ```
+
+   > `tokenInfo.price` and `stockInfo.price` come from different sources (on-chain oracle vs stock feed) and update at different frequencies, so a small premium/discount (typically within ±0.1%) is normal.
+
+   **Common multiplier categories**:
+
+   | Multiplier         | Cause                                                   |
+   |--------------------|---------------------------------------------------------|
+   | Exactly 1.0        | No dividends paid yet, or newly listed                  |
+   | Slightly above 1.0 | Cumulative cash dividend reinvestment (grows over time) |
+   | 5.0, 10.0          | Stock split reflected in token structure                |
+
+   > The exact multiplier value changes over time as dividends accumulate. Always read it from the API at query time — never hardcode.
